@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+import smtplib
+import textwrap
+import markdown2
+from email.mime.text import MIMEText
+from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
+from openai import OpenAI
+
+# --- Configuration ---
+# Build paths relative to the script's location to ensure .env file is found
+script_dir = os.path.dirname(os.path.abspath(__file__))
+dotenv_path = os.path.join(script_dir, '.env')
+load_dotenv(dotenv_path=dotenv_path, override=True)
+
+# Load from environment
+API_KEY = os.getenv("OPENAI_API_KEY")
+API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASS = os.getenv("SMTP_PASS")
+EMAIL_FROM = os.getenv("EMAIL_FROM")
+EMAIL_TO = os.getenv("EMAIL_TO")
+CONTAINERS = [c.strip() for c in os.getenv("CONTAINERS", "").split(",") if c.strip()]
+MAX_LOG_CHARS = int(os.getenv("MAX_LOG_CHARS", 20000))
+SINCE_HOURS = int(os.getenv("SINCE_HOURS", 24))
+
+def get_docker_containers():
+    """Returns a list of running Docker container names."""
+    if CONTAINERS:
+        return CONTAINERS
+    try:
+        out = subprocess.check_output(
+            ["docker", "ps", "--format", "{{.Names}}"]
+        )
+        return [c for c in out.splitlines() if c]
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(f"Error getting Docker containers: {e.stderr}")
+    except FileNotFoundError:
+        raise SystemExit("Error: 'docker' command not found. Is Docker installed and in your PATH?")
+
+def get_container_logs(container_name, since_iso):
+    """Collects logs for a given container since a specific time."""
+    try:
+        logs = subprocess.check_output(
+            ["docker", "logs", container_name, f"--since={since_iso}"],
+            stderr=subprocess.STDOUT
+        )
+        return logs.decode("utf-8")
+    except subprocess.CalledProcessError as e:
+        return f"Error collecting logs: {e.output.decode('utf-8')}"
+
+def build_prompt(log_data):
+    """Builds the prompt for the language model."""
+    log_sections = []
+    for name, logs in log_data.items():
+        trimmed_logs = logs[-MAX_LOG_CHARS:]
+        log_sections.append(f"## Container: {name}\n\n```\n{trimmed_logs}\n```")
+
+    logs_block = "\n\n".join(log_sections)
+    return textwrap.dedent(f"""
+    You are an expert SRE assistant. Your task is to analyze the following Docker container logs from the last {SINCE_HOURS} hours and provide a clear, actionable summary.
+
+    Please structure your response in Markdown as follows:
+
+    ### 1. Overall Health Summary
+    - A brief, one-sentence summary of the system's health. If everything is normal, state that clearly.
+
+    ### 2. Key Events & Issues
+    - Use a bulleted list to describe significant events, warnings, or errors.
+    - For each item, specify the affected container and the severity.
+    - **IMPORTANT**: Wrap the severity level in a span tag with a class corresponding to the severity. For example:
+      - For HIGH severity: `<span class="severity-high">HIGH</span>`
+      - For MEDIUM severity: `<span class="severity-medium">MEDIUM</span>`
+      - For LOW severity: `<span class="severity-low">LOW</span>`
+
+    ### 3. Recommendations & Next Steps
+    - For each issue identified, provide a clear, numbered list of recommended actions to investigate or resolve it.
+    - If no issues are found, recommend continued monitoring.
+
+    Here are the logs:
+
+    {logs_block}
+    """)
+
+
+def get_ai_summary(prompt):
+    """Calls the OpenAI API to get a summary of the logs."""
+    try:
+        client = OpenAI(api_key=API_KEY, base_url=API_BASE)
+        completion = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": "You are a concise, practical SRE assistant who provides summaries in Markdown."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            max_tokens=1024,
+        )
+        return completion.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error calling OpenAI API: {e}"
+
+def send_email(body):
+    """Sends the summary email."""
+    try:
+        style = """
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f8f9fa; padding: 20px; }
+            h1, h2, h3 { color: #2c3e50; border-bottom: 2px solid #eaecef; padding-bottom: 0.3em; }
+            code { background-color: #e8eaed; padding: 2px 6px; border-radius: 6px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; }
+            pre { background-color: #e8eaed; padding: 1em; border-radius: 6px; overflow-x: auto; }
+            ul { padding-left: 20px; }
+            li { margin-bottom: 0.5em; }
+            .severity-high { background-color: #e74c3c; color: white; padding: 4px 10px; border-radius: 15px; font-size: 0.85em; font-weight: bold; text-transform: uppercase; }
+            .severity-medium { background-color: #f39c12; color: white; padding: 4px 10px; border-radius: 15px; font-size: 0.85em; font-weight: bold; text-transform: uppercase; }
+            .severity-low { background-color: #3498db; color: white; padding: 4px 10px; border-radius: 15px; font-size: 0.85em; font-weight: bold; text-transform: uppercase; }
+        </style>
+        """
+        html_body = markdown2.markdown(body)
+        full_html = f"<html><head>{style}</head><body>{html_body}</body></html>"
+        msg = MIMEText(full_html, 'html')
+        msg["Subject"] = f"Container Log Summary - {datetime.now().strftime('%Y-%m-%d')}"
+        msg["From"] = EMAIL_FROM
+        msg["To"] = EMAIL_TO
+
+        if SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as smtp:
+                if SMTP_USER and SMTP_PASS:
+                    smtp.login(SMTP_USER, SMTP_PASS)
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
+                if SMTP_USER and SMTP_PASS:
+                    smtp.starttls()
+                    smtp.login(SMTP_USER, SMTP_PASS)
+                smtp.send_message(msg)
+        
+        print("Email sent successfully.")
+    except smtplib.SMTPException as e:
+        print(f"Error sending email: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred while sending email: {e}")
+
+def main():
+    """Main function to orchestrate the log summary process."""
+    if not all([API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO]):
+        raise SystemExit("Missing required env vars. Check your .env file for: OPENAI_API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO")
+
+    since_iso = (datetime.now(timezone.utc) - timedelta(hours=SINCE_HOURS)).isoformat()
+    
+    print("Collecting logs from containers...")
+    containers = get_docker_containers()
+    if not containers:
+        print("No running containers found to analyze.")
+        return
+
+    log_data = {}
+    for name in containers:
+        log_data[name] = get_container_logs(name, since_iso)
+
+    print("Generating AI summary...")
+    prompt = build_prompt(log_data)
+    summary = get_ai_summary(prompt)
+
+    print("Sending summary email...")
+    send_email(summary)
+
+if __name__ == "__main__":
+    main()
