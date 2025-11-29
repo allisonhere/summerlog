@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 # --- Configuration ---
-# Build paths relative to the script's location to ensure .env file is found
-script_dir = os.path.dirname(os.path.abspath(__file__))
-dotenv_path = os.path.join(script_dir, '.env')
+# Build paths relative to the project root
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+dotenv_path = os.path.join(project_root, '.env')
 load_dotenv(dotenv_path=dotenv_path, override=True)
 
 # Load from environment
@@ -28,6 +28,7 @@ EMAIL_TO = os.getenv("EMAIL_TO")
 CONTAINERS = [c.strip() for c in os.getenv("CONTAINERS", "").split(",") if c.strip()]
 MAX_LOG_CHARS = int(os.getenv("MAX_LOG_CHARS", 20000))
 SINCE_HOURS = int(os.getenv("SINCE_HOURS", 24))
+TIMESTAMP_FILE = os.path.join(project_root, 'last_run_timestamp.txt')
 
 def get_docker_containers():
     """Returns a list of running Docker container names."""
@@ -54,7 +55,7 @@ def get_container_logs(container_name, since_iso):
     except subprocess.CalledProcessError as e:
         return f"Error collecting logs: {e.output.decode('utf-8')}"
 
-def build_prompt(log_data):
+def build_prompt(log_data, since_str):
     """Builds the prompt for the language model."""
     log_sections = []
     for name, logs in log_data.items():
@@ -63,7 +64,7 @@ def build_prompt(log_data):
 
     logs_block = "\n\n".join(log_sections)
     return textwrap.dedent(f"""
-    You are an expert SRE assistant. Your task is to analyze the following Docker container logs from the last {SINCE_HOURS} hours and provide a clear, actionable summary.
+    You are an expert SRE assistant. Your task is to analyze the following Docker container logs since {since_str} and provide a clear, actionable summary.
 
     Please structure your response in Markdown as follows:
 
@@ -86,6 +87,7 @@ def build_prompt(log_data):
 
     {logs_block}
     """)
+
 
 
 def get_ai_summary(prompt):
@@ -151,9 +153,18 @@ def main():
     if not all([API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO]):
         raise SystemExit("Missing required env vars. Check your .env file for: OPENAI_API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO")
 
-    since_iso = (datetime.now(timezone.utc) - timedelta(hours=SINCE_HOURS)).isoformat()
-    
-    print("Collecting logs from containers...")
+    # Determine the timeframe for log collection
+    try:
+        with open(TIMESTAMP_FILE, 'r') as f:
+            since_iso = f.read().strip()
+            since_str = f"the last run at {since_iso}"
+    except FileNotFoundError:
+        since_iso = (datetime.now(timezone.utc) - timedelta(hours=SINCE_HOURS)).isoformat()
+        since_str = f"the last {SINCE_HOURS} hours"
+
+    current_timestamp = datetime.now(timezone.utc).isoformat()
+
+    print(f"Collecting logs from containers since {since_iso}...")
     containers = get_docker_containers()
     if not containers:
         print("No running containers found to analyze.")
@@ -163,12 +174,25 @@ def main():
     for name in containers:
         log_data[name] = get_container_logs(name, since_iso)
 
+    # Check if there are any new logs
+    if all(not logs for logs in log_data.values()):
+        print("No new logs to analyze.")
+        # Update the timestamp file even if there are no new logs
+        with open(TIMESTAMP_FILE, 'w') as f:
+            f.write(current_timestamp)
+        return
+
     print("Generating AI summary...")
-    prompt = build_prompt(log_data)
+    prompt = build_prompt(log_data, since_str)
     summary = get_ai_summary(prompt)
 
     print("Sending summary email...")
     send_email(summary)
+
+    # Update the timestamp file after a successful run
+    with open(TIMESTAMP_FILE, 'w') as f:
+        f.write(current_timestamp)
+    print(f"Timestamp file updated to {current_timestamp}")
 
 if __name__ == "__main__":
     main()

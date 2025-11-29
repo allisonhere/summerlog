@@ -5,7 +5,7 @@
 # --- Configuration ---
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PYTHON_PATH="$SCRIPT_DIR/.venv/bin/python3"
-SCRIPT_PATH="$SCRIPT_DIR/ai_log_summary.py"
+SCRIPT_PATH="$SCRIPT_DIR/summerlog/ai_log_summary.py"
 CRON_SCHEDULE="0 8 * * *" # Run every day at 8:00 AM
 
 # --- Main Logic ---
