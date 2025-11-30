@@ -8,3 +8,8 @@ __pycache__/
 
 # Timestamp file
 last_run_timestamp.txt
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
