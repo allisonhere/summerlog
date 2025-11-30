@@ -4,7 +4,7 @@ Feels like a calm hacker workspace: serious, but a little playful and neon-y.
 */
 
 /* Define CSS variables for the color palette */
-:root {
+Screen {
     /* Backgrounds */
     --bg-deep-charcoal: #0b1220;
     --bg-dark-gray: #111827;
@@ -34,15 +34,7 @@ Feels like a calm hacker workspace: serious, but a little playful and neon-y.
     --surface-lighter: #1e293b; /* Slightly lighter for cards/blocks */
     --surface-darker: #0a0f1a; /* Optional deeper sections */
     --border-subtle: rgba(255,255,255,0.06);
-}
 
-/* Base styles */
-* {
-    color: var(--text-main);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
-Screen {
     background: var(--bg-deep-charcoal);
     align: center middle;
 }
