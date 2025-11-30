@@ -4,13 +4,13 @@ import subprocess
 import smtplib
 import textwrap
 import markdown2
+import sys
+import tkinter as tk
+from tkinter import ttk
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
-from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll, Horizontal, Container
-from textual.widgets import Header, Footer, Input, Button, Label, Static, RadioSet, RadioButton
 
 
 # --- Configuration ---
@@ -153,99 +153,74 @@ def send_email(body):
         print(f"An unexpected error occurred while sending email: {e}")
 
 def configure():
-    """Launches the TUI configuration wizard."""
-    TuiApp().run()
+    """Launch a simple Tkinter GUI to configure Summerlog."""
+    root = tk.Tk()
+    root.title("Summerlog Configuration")
 
-class TuiApp(App):
-    """A Textual app to configure Summerlog."""
+    defaults = {
+        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
+        "SMTP_HOST": os.getenv("SMTP_HOST", ""),
+        "SMTP_PORT": os.getenv("SMTP_PORT", "587"),
+        "SMTP_USER": os.getenv("SMTP_USER", ""),
+        "SMTP_PASS": os.getenv("SMTP_PASS", ""),
+        "EMAIL_FROM": os.getenv("EMAIL_FROM", ""),
+        "EMAIL_TO": os.getenv("EMAIL_TO", ""),
+    }
+    fields = {k: tk.StringVar(value=v) for k, v in defaults.items()}
+    schedule_var = tk.StringVar(value="daily")
+    status_var = tk.StringVar(value="Fill in the fields and click Save.")
 
-    CSS_PATH = "styles.css"
+    container = ttk.Frame(root, padding=12)
+    container.pack(fill="both", expand=True)
 
-    def compose(self) -> ComposeResult:
-        """Create child widgets for the app."""
-        yield Header()
-        yield Footer()
-        with VerticalScroll(id="main-container"):
-            yield Static("Summerlog Configuration", classes="title")
-            yield Static(
-                "Save writes .env and installs the cron job. Quit closes without saving. Click or Tab into fields; Enter toggles schedule options.",
-                classes="helper",
-            )
+    ttk.Label(container, text="Summerlog Configuration", font=("TkDefaultFont", 12, "bold")).pack(pady=(0, 8))
+    ttk.Label(container, text="Save writes .env and installs the cron job. Quit closes without saving.").pack(pady=(0, 12))
 
-            with Container(classes="section"):
-                yield Static("OpenAI", classes="subtitle")
-                yield Static("OpenAI API Key", classes="field-label")
-                yield Input(placeholder="sk-...", id="openai_api_key", password=True, value=os.getenv("OPENAI_API_KEY", ""))
+    def add_field(label, key, show=None):
+        frame = ttk.Frame(container, padding=(0, 4))
+        frame.pack(fill="x")
+        ttk.Label(frame, text=label, width=18, anchor="w").pack(side="left")
+        entry = ttk.Entry(frame, textvariable=fields[key], show=show)
+        entry.pack(side="left", fill="x", expand=True)
+        return entry
 
-            with Container(classes="section"):
-                yield Static("Email Settings", classes="subtitle")
-                yield Static("SMTP Host", classes="field-label")
-                yield Input(placeholder="smtp.example.com", id="smtp_host", value=os.getenv("SMTP_HOST", ""))
-                yield Static("SMTP Port", classes="field-label")
-                yield Input(placeholder="587", id="smtp_port", value=os.getenv("SMTP_PORT", ""))
-                yield Static("SMTP User", classes="field-label")
-                yield Input(placeholder="user@example.com", id="smtp_user", value=os.getenv("SMTP_USER", ""))
-                yield Static("SMTP Password", classes="field-label")
-                yield Input(placeholder="Your password", id="smtp_pass", password=True, value=os.getenv("SMTP_PASS", ""))
-                yield Static("From Email", classes="field-label")
-                yield Input(placeholder="sender@example.com", id="email_from", value=os.getenv("EMAIL_FROM", ""))
-                yield Static("To Email", classes="field-label")
-                yield Input(placeholder="recipient@example.com", id="email_to", value=os.getenv("EMAIL_TO", ""))
+    ttk.Label(container, text="OpenAI", font=("TkDefaultFont", 10, "bold")).pack(anchor="w")
+    add_field("API Key", "OPENAI_API_KEY", show="*")
 
-            with Container(classes="section"):
-                yield Static("Cron Schedule", classes="subtitle")
-                with RadioSet(id="schedule", classes="schedule-set"):
-                    yield RadioButton("Daily at 8:00 AM", id="daily", value=True)
-                    yield RadioButton("Weekly Sunday 8:00 AM", id="weekly")
-                    yield RadioButton("Hourly", id="hourly")
-                yield Static("Choose how often to run the summary email.", classes="hint")
+    ttk.Label(container, text="Email Settings", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(8, 0))
+    add_field("SMTP Host", "SMTP_HOST")
+    add_field("SMTP Port", "SMTP_PORT")
+    add_field("SMTP User", "SMTP_USER")
+    add_field("SMTP Password", "SMTP_PASS", show="*")
+    add_field("From Email", "EMAIL_FROM")
+    add_field("To Email", "EMAIL_TO")
 
-            with Horizontal(classes="buttons"):
-                yield Button("Save", variant="primary", id="save")
-                yield Button("Quit", variant="warning", id="quit")
+    ttk.Label(container, text="Cron Schedule", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(8, 0))
+    schedule_frame = ttk.Frame(container, padding=(0, 4))
+    schedule_frame.pack(fill="x")
+    ttk.OptionMenu(schedule_frame, schedule_var, "daily", "daily", "weekly", "hourly").pack(fill="x")
+    ttk.Label(container, text="Choose how often to run the summary email.").pack(anchor="w")
 
-    def on_mount(self) -> None:
-        """Set initial focus to the first input for easier editing."""
-        try:
-            self.set_focus(self.query_one("#openai_api_key"))
-        except Exception:
-            pass
+    def save():
+        env_path = os.path.join(project_root, ".env")
+        with open(env_path, "w") as f:
+            for key in ["OPENAI_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "EMAIL_TO"]:
+                f.write(f"{key}={fields[key].get()}\n")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Event handler called when a button is pressed."""
-        if event.button.id == "save":
-            self.save_config()
-            self.exit("Configuration saved!")
-        elif event.button.id == "quit":
-            self.exit("Configuration cancelled.")
-
-    def save_config(self) -> None:
-        """Save the configuration to the .env file and set up the cron job."""
-        # Save .env file
-        with open(os.path.join(project_root, ".env"), "w") as f:
-            f.write(f"OPENAI_API_KEY={self.query_one('#openai_api_key').value}\n")
-            f.write(f"SMTP_HOST={self.query_one('#smtp_host').value}\n")
-            f.write(f"SMTP_PORT={self.query_one('#smtp_port').value}\n")
-            f.write(f"SMTP_USER={self.query_one('#smtp_user').value}\n")
-            f.write(f"SMTP_PASS={self.query_one('#smtp_pass').value}\n")
-            f.write(f"EMAIL_FROM={self.query_one('#email_from').value}\n")
-            f.write(f"EMAIL_TO={self.query_one('#email_to').value}\n")
-        
-        # Set up cron job
-        schedule_map = {
-            "daily": "0 8 * * *",
-            "weekly": "0 8 * * 0",
-            "hourly": "0 * * * *",
-        }
-        schedule_id = self.query_one(RadioSet).pressed_button.id
-        cron_schedule = schedule_map.get(schedule_id, "0 8 * * *")
-        
-        python_path = os.path.join(project_root, ".venv/bin/python3")
-        script_path = os.path.join(project_root, "summerlog/ai_log_summary.py")
+        cron_schedules = {"daily": "0 8 * * *", "weekly": "0 8 * * 0", "hourly": "0 * * * *"}
+        cron_schedule = cron_schedules.get(schedule_var.get(), "0 8 * * *")
+        python_path = sys.executable
         cron_job = f"{cron_schedule} {python_path} -m summerlog.ai_log_summary"
-
-        # Add the new cron job
         os.system(f'(crontab -l 2>/dev/null | grep -v "summerlog.ai_log_summary" ; echo "{cron_job}") | crontab -')
+        status_var.set(f"Saved to {env_path} and cron updated.")
+
+    btns = ttk.Frame(container, padding=(0, 12))
+    btns.pack(fill="x")
+    ttk.Button(btns, text="Save", command=save).pack(side="right", padx=4)
+    ttk.Button(btns, text="Quit", command=root.destroy).pack(side="right")
+
+    ttk.Label(container, textvariable=status_var, foreground="#555").pack(anchor="w")
+    root.mainloop()
 
 def main():
 
