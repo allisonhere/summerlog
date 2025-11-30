@@ -6,7 +6,7 @@ Feels like a calm hacker workspace: serious, but a little playful and neon-y.
 /* Base styles */
 * {
     color: #e5e7eb; /* --text-main */
-    font-family: sans-serif;
+    /* font-family: Textual does not support complex font stacks like web CSS */
 }
 
 Screen {
@@ -21,8 +21,11 @@ Screen {
     padding: 2 3; /* More breathing room */
     background: #111827; /* --bg-dark-gray */
     border: solid rgba(255,255,255,0.06); /* --border-subtle */
-    border-radius: 0.5; /* Rounded corners */
-    box-shadow: 0 4 10 rgba(0,0,0,0.3); /* Soft shadow */
+    border-top-left-radius: 1; /* Rounded corners */
+    border-top-right-radius: 1;
+    border-bottom-left-radius: 1;
+    border-bottom-right-radius: 1;
+    /* box-shadow: Textual does not support box-shadow directly */
 }
 
 /* Typography */
@@ -32,18 +35,17 @@ Screen {
     text-style: bold;
     color: #60a5fa; /* --accent-primary-light-blue */
     margin-bottom: 1;
-    padding-bottom: 0.5;
-    border-bottom: solid 1 rgba(255,255,255,0.06); /* --border-subtle */
+    padding-bottom: 1; /* Integer value */
+    border-bottom: solid #0b1220; /* --border-subtle, simplified */
 }
 
 .subtitle {
     text-style: bold;
     color: #e5e7eb; /* --text-main */
-    margin-top: 1.5; /* More spacing above subtitles */
-    margin-bottom: 0.5;
+    margin-top: 2; /* Integer value */
+    margin-bottom: 1; /* Integer value */
     text-decoration: underline;
-    text-decoration-style: dashed; /* A little playful */
-    text-decoration-color: #88c0d0; /* --accent-primary-cyan */
+    /* text-decoration-style and text-decoration-color are not supported */
 }
 
 .helper {
@@ -55,36 +57,42 @@ Screen {
 .field-label {
     color: #9ca3af; /* --text-subtle */
     margin-top: 1;
-    margin-bottom: 0.2;
+    margin-bottom: 0; /* Integer value */
 }
 
 /* Inputs */
 Input {
     width: 100%;
     background: #1f2933; /* --bg-medium-gray */
-    border: solid 1 rgba(255,255,255,0.06); /* --border-subtle */
-    border-radius: 0.3;
+    border: solid rgba(255,255,255,0.06); /* --border-subtle */
+    border-top-left-radius: 1;
+    border-top-right-radius: 1;
+    border-bottom-left-radius: 1;
+    border-bottom-right-radius: 1;
     padding: 0 1;
     color: #e5e7eb; /* --text-main */
 }
 
 Input:focus {
-    border: solid 1 #3b82f6; /* --accent-primary-blue */
-    box-shadow: 0 0 0 1 #3b82f6; /* --accent-primary-blue */
+    border: solid #3b82f6; /* --accent-primary-blue */
+    /* box-shadow: Textual does not support box-shadow directly */
 }
 
 /* Radio Buttons / Schedule */
 RadioSet {
     margin-top: 1;
-    border: solid 1 rgba(255,255,255,0.06); /* --border-subtle */
-    border-radius: 0.3;
-    padding: 0.5 1;
     background: #1f2933; /* --bg-medium-gray */
+    border: solid rgba(255,255,255,0.06); /* --border-subtle */
+    border-top-left-radius: 1;
+    border-top-right-radius: 1;
+    border-bottom-left-radius: 1;
+    border-bottom-right-radius: 1;
+    padding: 1 1; /* Integer values */
 }
 
 RadioButton {
     color: #e5e7eb; /* --text-main */
-    margin-bottom: 0.3;
+    margin-bottom: 0; /* Integer value */
 }
 
 RadioButton.-on {
@@ -94,7 +102,7 @@ RadioButton.-on {
 
 .hint {
     color: #9ca3af; /* --text-subtle */
-    margin-top: 0.5;
+    margin-top: 1; /* Integer value */
     text-align: center;
 }
 
@@ -106,11 +114,14 @@ RadioButton.-on {
 
 Button {
     margin: 0 1;
-    padding: 0.5 2;
-    border-radius: 0.5;
+    padding: 1 2; /* Integer values */
+    border-top-left-radius: 1;
+    border-top-right-radius: 1;
+    border-bottom-left-radius: 1;
+    border-bottom-right-radius: 1;
     text-style: bold;
     background: #1f2933; /* --bg-medium-gray */
-    border: solid 1 rgba(255,255,255,0.06); /* --border-subtle */
+    border: solid rgba(255,255,255,0.06); /* --border-subtle */
     color: #e5e7eb; /* --text-main */
 }
 
@@ -121,18 +132,18 @@ Button:hover {
 
 Button.primary {
     background: #3b82f6; /* --accent-primary-blue */
-    border: solid 1 #3b82f6; /* --accent-primary-blue */
+    border: solid #3b82f6; /* --accent-primary-blue */
     color: white;
 }
 
 Button.primary:hover {
     background: #60a5fa; /* --accent-primary-light-blue */
-    border: solid 1 #60a5fa; /* --accent-primary-light-blue */
+    border: solid #60a5fa; /* --accent-primary-light-blue */
 }
 
 Button.warning {
     background: #ef4444; /* --semantic-error */
-    border: solid 1 #ef4444; /* --semantic-error */
+    border: solid #ef4444; /* --semantic-error */
     color: white;
 }
 
@@ -143,29 +154,38 @@ Button.warning:hover {
 
 /* Semantic "Pills" (for email summary, not TUI directly, but good to have consistent colors) */
 .severity-high {
-    background-color: #ef4444; /* --semantic-error */
+    background: #ef4444; /* --semantic-error */
     color: white;
-    padding: 4px 10px;
-    border-radius: 15px;
-    font-size: 0.85em;
-    font-weight: bold;
-    text-transform: uppercase;
+    padding: 1 2; /* Integer values */
+    border-top-left-radius: 2;
+    border-top-right-radius: 2;
+    border-bottom-left-radius: 2;
+    border-bottom-right-radius: 2;
+    /* font-size: Textual uses integer values or keywords */
+    text-style: bold;
+    /* text-transform is not supported */
 }
 .severity-medium {
-    background-color: #facc15; /* --semantic-warning */
+    background: #facc15; /* --semantic-warning */
     color: #111827; /* --bg-dark-gray */
-    padding: 4px 10px;
-    border-radius: 15px;
-    font-size: 0.85em;
-    font-weight: bold;
-    text-transform: uppercase;
+    padding: 1 2; /* Integer values */
+    border-top-left-radius: 2;
+    border-top-right-radius: 2;
+    border-bottom-left-radius: 2;
+    border-bottom-right-radius: 2;
+    /* font-size: Textual uses integer values or keywords */
+    text-style: bold;
+    /* text-transform is not supported */
 }
 .severity-low {
-    background-color: #3b82f6; /* --accent-primary-blue */
+    background: #3b82f6; /* --accent-primary-blue */
     color: white;
-    padding: 4px 10px;
-    border-radius: 15px;
-    font-size: 0.85em;
-    font-weight: bold;
-    text-transform: uppercase;
+    padding: 1 2; /* Integer values */
+    border-top-left-radius: 2;
+    border-top-right-radius: 2;
+    border-bottom-left-radius: 2;
+    border-bottom-right-radius: 2;
+    /* font-size: Textual uses integer values or keywords */
+    text-style: bold;
+    /* text-transform is not supported */
 }
