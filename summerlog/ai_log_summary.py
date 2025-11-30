@@ -8,6 +8,10 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
+from textual.app import App, ComposeResult
+from textual.containers import VerticalScroll, Horizontal
+from textual.widgets import Header, Footer, Input, Button, Label, Static, RadioSet, RadioButton
+
 
 # --- Configuration ---
 # Build paths relative to the project root
@@ -149,11 +153,86 @@ def send_email(body):
         print(f"An unexpected error occurred while sending email: {e}")
 
 def configure():
-    """Placeholder for the TUI configuration wizard."""
-    print("This is the placeholder for the configuration TUI.")
-    print("This will be implemented in the next step.")
+    """Launches the TUI configuration wizard."""
+    TuiApp().run()
+
+class TuiApp(App):
+    """A Textual app to configure Summerlog."""
+
+    CSS_PATH = "styles.css"
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets for the app."""
+        yield Header()
+        yield Footer()
+        with VerticalScroll(id="main-container"):
+            yield Static("Summerlog Configuration", classes="title")
+            
+            yield Label("OpenAI API Key:")
+            yield Input(placeholder="sk-...", id="openai_api_key", password=True)
+
+            yield Static("Email Settings", classes="subtitle")
+            yield Label("SMTP Host:")
+            yield Input(placeholder="smtp.example.com", id="smtp_host")
+            yield Label("SMTP Port:")
+            yield Input(placeholder="587", id="smtp_port")
+            yield Label("SMTP User:")
+            yield Input(placeholder="user@example.com", id="smtp_user")
+            yield Label("SMTP Password:")
+            yield Input(placeholder="Your password", id="smtp_pass", password=True)
+            yield Label("From Email:")
+            yield Input(placeholder="sender@example.com", id="email_from")
+            yield Label("To Email:")
+            yield Input(placeholder="recipient@example.com", id="email_to")
+
+            yield Static("Cron Schedule", classes="subtitle")
+            with RadioSet(id="schedule"):
+                yield RadioButton("Daily at 8:00 AM", id="daily", value=True)
+                yield RadioButton("Weekly on Sundays at 8:00 AM", id="weekly")
+                yield RadioButton("Hourly", id="hourly")
+            
+            with Horizontal(classes="buttons"):
+                yield Button("Save", variant="primary", id="save")
+                yield Button("Quit", id="quit")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Event handler called when a button is pressed."""
+        if event.button.id == "save":
+            self.save_config()
+            self.exit("Configuration saved!")
+        elif event.button.id == "quit":
+            self.exit("Configuration cancelled.")
+
+    def save_config(self) -> None:
+        """Save the configuration to the .env file and set up the cron job."""
+        # Save .env file
+        with open(os.path.join(project_root, ".env"), "w") as f:
+            f.write(f"OPENAI_API_KEY={self.query_one('#openai_api_key').value}\n")
+            f.write(f"SMTP_HOST={self.query_one('#smtp_host').value}\n")
+            f.write(f"SMTP_PORT={self.query_one('#smtp_port').value}\n")
+            f.write(f"SMTP_USER={self.query_one('#smtp_user').value}\n")
+            f.write(f"SMTP_PASS={self.query_one('#smtp_pass').value}\n")
+            f.write(f"EMAIL_FROM={self.query_one('#email_from').value}\n")
+            f.write(f"EMAIL_TO={self.query_one('#email_to').value}\n")
+        
+        # Set up cron job
+        schedule_map = {
+            "daily": "0 8 * * *",
+            "weekly": "0 8 * * 0",
+            "hourly": "0 * * * *",
+        }
+        schedule_id = self.query_one(RadioSet).pressed_button.id
+        cron_schedule = schedule_map.get(schedule_id, "0 8 * * *")
+        
+        python_path = os.path.join(project_root, ".venv/bin/python3")
+        script_path = os.path.join(project_root, "summerlog/ai_log_summary.py")
+        cron_job = f"{cron_schedule} {python_path} -m summerlog.ai_log_summary"
+
+        # Add the new cron job
+        os.system(f'(crontab -l 2>/dev/null | grep -v "summerlog.ai_log_summary" ; echo "{cron_job}") | crontab -')
 
 def main():
+
     """Main function to orchestrate the log summary process."""
     if not all([API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO]):
         raise SystemExit("Missing required env vars. Check your .env file for: OPENAI_API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO")

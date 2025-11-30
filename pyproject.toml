@@ -20,6 +20,7 @@ dependencies = [
     "python-dotenv",
     "openai",
     "markdown2",
+    "textual",
 ]
 
 [project.scripts]
