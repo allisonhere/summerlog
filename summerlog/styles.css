@@ -1,12 +1,204 @@
-/* Minimal layout tweaks only: keep default colors and typography */
+/*
+Overall mood: Dark, cozy, “developer terminal” aesthetic with a polished, modern feel.
+Feels like a calm hacker workspace: serious, but a little playful and neon-y.
+*/
+
+/* Define CSS variables for the color palette */
+:root {
+    /* Backgrounds */
+    --bg-deep-charcoal: #0b1220;
+    --bg-dark-gray: #111827;
+    --bg-medium-gray: #1f2933;
+    --bg-light-gray: #2e3440;
+
+    /* Primary accent: cool blue / cyan */
+    --accent-primary-blue: #3b82f6;
+    --accent-primary-light-blue: #60a5fa;
+    --accent-primary-cyan: #88c0d0;
+
+    /* Secondary accent: muted purple / lavender */
+    --accent-secondary-purple: #a855f7;
+    --accent-secondary-lavender: #b48ead;
+
+    /* Text colors */
+    --text-main: #e5e7eb; /* Light gray, high contrast */
+    --text-subtle: #9ca3af; /* Softer gray */
+    --text-subtler: #6b7280; /* Even softer gray */
+
+    /* Semantic colors */
+    --semantic-success: #a3be8c; /* Soft green */
+    --semantic-warning: #facc15; /* Warm amber */
+    --semantic-error: #ef4444; /* Muted red */
+
+    /* Surface & Borders */
+    --surface-lighter: #1e293b; /* Slightly lighter for cards/blocks */
+    --surface-darker: #0a0f1a; /* Optional deeper sections */
+    --border-subtle: rgba(255,255,255,0.06);
+}
+
+/* Base styles */
+* {
+    color: var(--text-main);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
 
 Screen {
+    background: var(--bg-deep-charcoal);
     align: center middle;
 }
 
 #main-container {
     width: 80;
-    max-width: 90;
+    max-width: 90%; /* Use percentage for responsiveness */
     min-width: 60;
-    padding: 1;
+    padding: 2 3; /* More breathing room */
+    background: var(--bg-dark-gray); /* Slightly lighter surface for the main container */
+    border: solid var(--border-subtle);
+    border-radius: 0.5; /* Rounded corners */
+    box-shadow: 0 4 10 rgba(0,0,0,0.3); /* Soft shadow */
+}
+
+/* Typography */
+.title {
+    content-align: center middle;
+    width: 100%;
+    text-style: bold;
+    color: var(--accent-primary-light-blue); /* Use accent for title */
+    margin-bottom: 1;
+    padding-bottom: 0.5;
+    border-bottom: solid 1 var(--border-subtle);
+}
+
+.subtitle {
+    text-style: bold;
+    color: var(--text-main);
+    margin-top: 1.5; /* More spacing above subtitles */
+    margin-bottom: 0.5;
+    text-decoration: underline;
+    text-decoration-style: dashed; /* A little playful */
+    text-decoration-color: var(--accent-primary-cyan);
+}
+
+.helper {
+    color: var(--text-subtle);
+    text-align: center;
+    margin-bottom: 1;
+}
+
+.field-label {
+    color: var(--text-subtle);
+    margin-top: 1;
+    margin-bottom: 0.2;
+}
+
+/* Inputs */
+Input {
+    width: 100%;
+    background: var(--bg-medium-gray); /* Darker input background */
+    border: solid 1 var(--border-subtle);
+    border-radius: 0.3;
+    padding: 0 1;
+    color: var(--text-main);
+}
+
+Input:focus {
+    border: solid 1 var(--accent-primary-blue); /* Primary accent for focus ring */
+    box-shadow: 0 0 0 1 var(--accent-primary-blue);
+}
+
+/* Radio Buttons / Schedule */
+RadioSet {
+    margin-top: 1;
+    border: solid 1 var(--border-subtle);
+    border-radius: 0.3;
+    padding: 0.5 1;
+    background: var(--bg-medium-gray);
+}
+
+RadioButton {
+    color: var(--text-main);
+    margin-bottom: 0.3;
+}
+
+RadioButton.-on {
+    color: var(--accent-primary-cyan); /* Highlight selected radio button */
+    text-style: bold;
+}
+
+.hint {
+    color: var(--text-subtle);
+    margin-top: 0.5;
+    text-align: center;
+}
+
+/* Buttons */
+.buttons {
+    align: center middle;
+    margin-top: 2;
+}
+
+Button {
+    margin: 0 1;
+    padding: 0.5 2;
+    border-radius: 0.5;
+    text-style: bold;
+    background: var(--bg-medium-gray);
+    border: solid 1 var(--border-subtle);
+    color: var(--text-main);
+}
+
+Button:hover {
+    background: var(--surface-lighter);
+    color: var(--accent-primary-cyan);
+}
+
+Button.primary {
+    background: var(--accent-primary-blue);
+    border: solid 1 var(--accent-primary-blue);
+    color: white;
+}
+
+Button.primary:hover {
+    background: var(--accent-primary-light-blue);
+    border: solid 1 var(--accent-primary-light-blue);
+}
+
+Button.warning {
+    background: var(--semantic-error);
+    border: solid 1 var(--semantic-error);
+    color: white;
+}
+
+Button.warning:hover {
+    background: var(--semantic-error); /* Keep red, maybe slightly darker */
+    color: var(--text-main);
+}
+
+/* Semantic "Pills" (for email summary, not TUI directly, but good to have consistent colors) */
+.severity-high {
+    background-color: var(--semantic-error);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 0.85em;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.severity-medium {
+    background-color: var(--semantic-warning);
+    color: var(--bg-dark-gray); /* Dark text on amber for contrast */
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 0.85em;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.severity-low {
+    background-color: var(--accent-primary-blue); /* Using primary accent for low */
+    color: white;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 0.85em;
+    font-weight: bold;
+    text-transform: uppercase;
 }
