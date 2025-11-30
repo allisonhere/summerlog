@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll, Horizontal
+from textual.containers import VerticalScroll, Horizontal, Container
 from textual.widgets import Header, Footer, Input, Button, Label, Static, RadioSet, RadioButton
 
 
@@ -167,33 +167,49 @@ class TuiApp(App):
         yield Footer()
         with VerticalScroll(id="main-container"):
             yield Static("Summerlog Configuration", classes="title")
-            
-            yield Label("OpenAI API Key:")
-            yield Input(placeholder="sk-...", id="openai_api_key", password=True)
+            yield Static(
+                "Save writes .env and installs the cron job. Quit closes without saving. Click or Tab into fields; Enter toggles schedule options.",
+                classes="helper",
+            )
 
-            yield Static("Email Settings", classes="subtitle")
-            yield Label("SMTP Host:")
-            yield Input(placeholder="smtp.example.com", id="smtp_host")
-            yield Label("SMTP Port:")
-            yield Input(placeholder="587", id="smtp_port")
-            yield Label("SMTP User:")
-            yield Input(placeholder="user@example.com", id="smtp_user")
-            yield Label("SMTP Password:")
-            yield Input(placeholder="Your password", id="smtp_pass", password=True)
-            yield Label("From Email:")
-            yield Input(placeholder="sender@example.com", id="email_from")
-            yield Label("To Email:")
-            yield Input(placeholder="recipient@example.com", id="email_to")
+            with Container(classes="section"):
+                yield Static("OpenAI", classes="subtitle")
+                yield Static("OpenAI API Key", classes="field-label")
+                yield Input(placeholder="sk-...", id="openai_api_key", password=True, value=os.getenv("OPENAI_API_KEY", ""))
 
-            yield Static("Cron Schedule", classes="subtitle")
-            with RadioSet(id="schedule"):
-                yield RadioButton("Daily at 8:00 AM", id="daily", value=True)
-                yield RadioButton("Weekly on Sundays at 8:00 AM", id="weekly")
-                yield RadioButton("Hourly", id="hourly")
-            
+            with Container(classes="section"):
+                yield Static("Email Settings", classes="subtitle")
+                yield Static("SMTP Host", classes="field-label")
+                yield Input(placeholder="smtp.example.com", id="smtp_host", value=os.getenv("SMTP_HOST", ""))
+                yield Static("SMTP Port", classes="field-label")
+                yield Input(placeholder="587", id="smtp_port", value=os.getenv("SMTP_PORT", ""))
+                yield Static("SMTP User", classes="field-label")
+                yield Input(placeholder="user@example.com", id="smtp_user", value=os.getenv("SMTP_USER", ""))
+                yield Static("SMTP Password", classes="field-label")
+                yield Input(placeholder="Your password", id="smtp_pass", password=True, value=os.getenv("SMTP_PASS", ""))
+                yield Static("From Email", classes="field-label")
+                yield Input(placeholder="sender@example.com", id="email_from", value=os.getenv("EMAIL_FROM", ""))
+                yield Static("To Email", classes="field-label")
+                yield Input(placeholder="recipient@example.com", id="email_to", value=os.getenv("EMAIL_TO", ""))
+
+            with Container(classes="section"):
+                yield Static("Cron Schedule", classes="subtitle")
+                with RadioSet(id="schedule", classes="schedule-set"):
+                    yield RadioButton("Daily at 8:00 AM", id="daily", value=True)
+                    yield RadioButton("Weekly Sunday 8:00 AM", id="weekly")
+                    yield RadioButton("Hourly", id="hourly")
+                yield Static("Choose how often to run the summary email.", classes="hint")
+
             with Horizontal(classes="buttons"):
                 yield Button("Save", variant="primary", id="save")
-                yield Button("Quit", id="quit")
+                yield Button("Quit", variant="warning", id="quit")
+
+    def on_mount(self) -> None:
+        """Set initial focus to the first input for easier editing."""
+        try:
+            self.set_focus(self.query_one("#openai_api_key"))
+        except Exception:
+            pass
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Event handler called when a button is pressed."""

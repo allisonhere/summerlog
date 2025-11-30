@@ -1,48 +1,12 @@
-/* styles.css */
+/* Minimal layout tweaks only: keep default colors and typography */
+
 Screen {
     align: center middle;
 }
 
 #main-container {
-    width: auto;
-    height: auto;
-    max-width: 80;
-    max-height: 28;
-    background: $panel;
+    width: 80;
+    max-width: 90;
+    min-width: 60;
     padding: 1;
-    border: thick $primary;
-}
-
-.title {
-    content-align: center middle;
-    width: 100%;
-    text-style: bold;
-    margin-bottom: 1;
-}
-
-.subtitle {
-    text-style: bold;
-    margin-top: 1;
-    text-decoration: underline;
-}
-
-Label {
-    margin-top: 1;
-}
-
-Input {
-    width: 100%;
-}
-
-RadioSet {
-    margin-top: 1;
-}
-
-.buttons {
-    align: center middle;
-    margin-top: 2;
-}
-
-Button {
-    margin: 0 1;
 }
