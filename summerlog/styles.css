@@ -1,31 +1,31 @@
 /*
 Overall mood: Dark, cozy, “developer terminal” aesthetic with a polished, modern feel.
-Feels like a calm hacker workspace: serious, but a little playful and neon-y.
 */
 
 /* Base styles */
 * {
-    color: #e5e7eb; /* --text-main */
-    /* font-family: Textual does not support complex font stacks like web CSS */
+    color: #E5E7EB; /* Light gray, high contrast */
+    /* Textual does not support complex font stacks like web CSS */
+    /* Textual uses terminal's font, so font-family is often omitted */
 }
 
 Screen {
-    background: #0b1220; /* --bg-deep-charcoal */
+    background: #0B1220; /* Deep blue-black / charcoal */
     align: center middle;
 }
 
 #main-container {
     width: 80;
-    max-width: 90%; /* Use percentage for responsiveness */
+    max-width: 90%;
     min-width: 60;
-    padding: 2 3; /* More breathing room */
-    background: #111827; /* --bg-dark-gray */
-    border: solid rgba(255,255,255,0.06); /* --border-subtle */
-    border-top-left-radius: 1; /* Rounded corners */
+    padding: 2 3; /* Vertical Horizontal */
+    background: #111827; /* Dark gray */
+    border: solid #2E3440; /* Using a slightly lighter background color for subtle border */
+    border-top-left-radius: 1;
     border-top-right-radius: 1;
     border-bottom-left-radius: 1;
     border-bottom-right-radius: 1;
-    /* box-shadow: Textual does not support box-shadow directly */
+    /* Textual does not support box-shadow directly */
 }
 
 /* Typography */
@@ -33,76 +33,76 @@ Screen {
     content-align: center middle;
     width: 100%;
     text-style: bold;
-    color: #60a5fa; /* --accent-primary-light-blue */
+    color: #60A5FA; /* Primary accent light blue */
     margin-bottom: 1;
-    padding-bottom: 1; /* Integer value */
-    border-bottom: solid #0b1220; /* --border-subtle, simplified */
+    padding-bottom: 1;
+    border-bottom: solid #2E3440; /* Subtle border */
 }
 
 .subtitle {
     text-style: bold;
-    color: #e5e7eb; /* --text-main */
-    margin-top: 2; /* Integer value */
-    margin-bottom: 1; /* Integer value */
+    color: #E5E7EB; /* Main text color */
+    margin-top: 2;
+    margin-bottom: 1;
     text-decoration: underline;
-    /* text-decoration-style and text-decoration-color are not supported */
+    /* Textual does not support text-decoration-style or text-decoration-color */
 }
 
 .helper {
-    color: #9ca3af; /* --text-subtle */
+    color: #9CA3AF; /* Subtle gray */
     text-align: center;
     margin-bottom: 1;
 }
 
 .field-label {
-    color: #9ca3af; /* --text-subtle */
+    color: #9CA3AF; /* Subtle gray */
     margin-top: 1;
-    margin-bottom: 0; /* Integer value */
+    margin-bottom: 0;
 }
 
 /* Inputs */
 Input {
     width: 100%;
-    background: #1f2933; /* --bg-medium-gray */
-    border: solid rgba(255,255,255,0.06); /* --border-subtle */
+    background: #1F2933; /* Medium gray */
+    border: solid #2E3440; /* Subtle border */
     border-top-left-radius: 1;
     border-top-right-radius: 1;
     border-bottom-left-radius: 1;
     border-bottom-right-radius: 1;
     padding: 0 1;
-    color: #e5e7eb; /* --text-main */
+    color: #E5E7EB; /* Main text color */
 }
 
 Input:focus {
-    border: solid #3b82f6; /* --accent-primary-blue */
-    /* box-shadow: Textual does not support box-shadow directly */
+    border: solid #3B82F6; /* Primary accent blue */
+    /* Textual does not support box-shadow directly */
 }
 
 /* Radio Buttons / Schedule */
 RadioSet {
     margin-top: 1;
-    background: #1f2933; /* --bg-medium-gray */
-    border: solid rgba(255,255,255,0.06); /* --border-subtle */
+    background: #1F2933; /* Medium gray */
+    border: solid #2E3440; /* Subtle border */
     border-top-left-radius: 1;
     border-top-right-radius: 1;
     border-bottom-left-radius: 1;
     border-bottom-right-radius: 1;
-    padding: 1 1; /* Integer values */
+    padding: 1 1;
 }
 
 RadioButton {
-    color: #e5e7eb; /* --text-main */
-    margin-bottom: 0; /* Integer value */
+    color: #E5E7EB; /* Main text color */
+    margin-bottom: 0;
 }
 
 RadioButton.-on {
-    color: #88c0d0; /* --accent-primary-cyan */
+    color: #88C0D0; /* Primary accent cyan */
     text-style: bold;
 }
 
 .hint {
-    color: #9ca3af; /* --text-subtle */
-    margin-top: 1; /* Integer value */
+    color: #9CA3AF; /* Subtle gray */
+    margin-top: 1;
     text-align: center;
 }
 
@@ -114,78 +114,78 @@ RadioButton.-on {
 
 Button {
     margin: 0 1;
-    padding: 1 2; /* Integer values */
+    padding: 1 2;
     border-top-left-radius: 1;
     border-top-right-radius: 1;
     border-bottom-left-radius: 1;
     border-bottom-right-radius: 1;
     text-style: bold;
-    background: #1f2933; /* --bg-medium-gray */
-    border: solid rgba(255,255,255,0.06); /* --border-subtle */
-    color: #e5e7eb; /* --text-main */
+    background: #1F2933; /* Medium gray */
+    border: solid #2E3440; /* Subtle border */
+    color: #E5E7EB; /* Main text color */
 }
 
 Button:hover {
-    background: #1e293b; /* --surface-lighter */
-    color: #88c0d0; /* --accent-primary-cyan */
+    background: #1E293B; /* Surface lighter */
+    color: #88C0D0; /* Primary accent cyan */
 }
 
 Button.primary {
-    background: #3b82f6; /* --accent-primary-blue */
-    border: solid #3b82f6; /* --accent-primary-blue */
+    background: #3B82F6; /* Primary accent blue */
+    border: solid #3B82F6; /* Primary accent blue */
     color: white;
 }
 
 Button.primary:hover {
-    background: #60a5fa; /* --accent-primary-light-blue */
-    border: solid #60a5fa; /* --accent-primary-light-blue */
+    background: #60A5FA; /* Primary accent light blue */
+    border: solid #60A5FA; /* Primary accent light blue */
 }
 
 Button.warning {
-    background: #ef4444; /* --semantic-error */
-    border: solid #ef4444; /* --semantic-error */
+    background: #EF4444; /* Semantic error */
+    border: solid #EF4444; /* Semantic error */
     color: white;
 }
 
 Button.warning:hover {
-    background: #ef4444; /* --semantic-error */
-    color: #e5e7eb; /* --text-main */
+    background: #EF4444; /* Semantic error */
+    color: #E5E7EB; /* Main text color */
 }
 
 /* Semantic "Pills" (for email summary, not TUI directly, but good to have consistent colors) */
 .severity-high {
-    background: #ef4444; /* --semantic-error */
+    background: #EF4444; /* Semantic error */
     color: white;
-    padding: 1 2; /* Integer values */
+    padding: 1 2;
     border-top-left-radius: 2;
     border-top-right-radius: 2;
     border-bottom-left-radius: 2;
     border-bottom-right-radius: 2;
-    /* font-size: Textual uses integer values or keywords */
+    /* Textual uses integer values or keywords for font-size */
     text-style: bold;
-    /* text-transform is not supported */
+    /* Textual does not support text-transform */
 }
 .severity-medium {
-    background: #facc15; /* --semantic-warning */
-    color: #111827; /* --bg-dark-gray */
-    padding: 1 2; /* Integer values */
+    background: #FACC15; /* Semantic warning */
+    color: #111827; /* Dark gray */
+    padding: 1 2;
     border-top-left-radius: 2;
     border-top-right-radius: 2;
     border-bottom-left-radius: 2;
     border-bottom-right-radius: 2;
-    /* font-size: Textual uses integer values or keywords */
+    /* Textual uses integer values or keywords for font-size */
     text-style: bold;
-    /* text-transform is not supported */
+    /* Textual does not support text-transform */
 }
 .severity-low {
-    background: #3b82f6; /* --accent-primary-blue */
+    background: #3B82F6; /* Primary accent blue */
     color: white;
-    padding: 1 2; /* Integer values */
+    padding: 1 2;
     border-top-left-radius: 2;
     border-top-right-radius: 2;
     border-bottom-left-radius: 2;
     border-bottom-right-radius: 2;
-    /* font-size: Textual uses integer values or keywords */
+    /* Textual uses integer values or keywords for font-size */
     text-style: bold;
-    /* text-transform is not supported */
+    /* Textual does not support text-transform */
 }
