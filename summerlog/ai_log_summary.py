@@ -1,23 +1,32 @@
 #!/usr/bin/env python3
+import getpass
 import os
-import subprocess
 import smtplib
-import textwrap
-import markdown2
+import subprocess
 import sys
-import tkinter as tk
-from tkinter import ttk
-from email.mime.text import MIMEText
+import textwrap
 from datetime import datetime, timedelta, timezone
+from email.mime.text import MIMEText
+
+try:
+    import tkinter as tk
+    from tkinter import ttk
+except ImportError:  # Tk may be missing on minimal/headless installs
+    tk = None
+    ttk = None
+
+import markdown2
 from dotenv import load_dotenv
 from openai import OpenAI
 
 
 # --- Configuration ---
-# Build paths relative to the project root
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-dotenv_path = os.path.join(project_root, '.env')
-load_dotenv(dotenv_path=dotenv_path, override=True)
+# Build paths under the user's config directory (~/.config/summerlog by default)
+CONFIG_ROOT = os.path.join(os.getenv("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "summerlog")
+os.makedirs(CONFIG_ROOT, exist_ok=True)
+DOTENV_PATH = os.path.join(CONFIG_ROOT, ".env")
+TIMESTAMP_FILE = os.path.join(CONFIG_ROOT, "last_run_timestamp.txt")
+load_dotenv(dotenv_path=DOTENV_PATH, override=True)
 
 # Load from environment
 API_KEY = os.getenv("OPENAI_API_KEY")
@@ -32,7 +41,6 @@ EMAIL_TO = os.getenv("EMAIL_TO")
 CONTAINERS = [c.strip() for c in os.getenv("CONTAINERS", "").split(",") if c.strip()]
 MAX_LOG_CHARS = int(os.getenv("MAX_LOG_CHARS", 20000))
 SINCE_HOURS = int(os.getenv("SINCE_HOURS", 24))
-TIMESTAMP_FILE = os.path.join(project_root, 'last_run_timestamp.txt')
 
 def get_docker_containers():
     """Returns a list of running Docker container names."""
@@ -42,9 +50,10 @@ def get_docker_containers():
         out = subprocess.check_output(
             ["docker", "ps", "--format", "{{.Names}}"]
         )
-        return [c for c in out.splitlines() if c]
+        return [c.decode("utf-8") for c in out.splitlines() if c]
     except subprocess.CalledProcessError as e:
-        raise SystemExit(f"Error getting Docker containers: {e.stderr}")
+        output = e.output.decode("utf-8") if e.output else ""
+        raise SystemExit(f"Error getting Docker containers: {output or e}")
     except FileNotFoundError:
         raise SystemExit("Error: 'docker' command not found. Is Docker installed and in your PATH?")
 
@@ -153,7 +162,18 @@ def send_email(body):
         print(f"An unexpected error occurred while sending email: {e}")
 
 def configure():
-    """Launch a simple Tkinter GUI to configure Summerlog."""
+    """Launch the appropriate configuration wizard based on environment."""
+    if _can_launch_gui():
+        try:
+            return _configure_gui()
+        except Exception as e:
+            # Fallback to CLI when GUI cannot start (e.g., DISPLAY unset/denied)
+            print(f"GUI configuration unavailable ({e}). Falling back to CLI wizard.")
+    return _configure_cli()
+
+
+def _configure_gui():
+    """Launch a Tkinter GUI to configure Summerlog."""
     root = tk.Tk()
     root.title("Summerlog Configuration")
 
@@ -202,17 +222,11 @@ def configure():
     ttk.Label(container, text="Choose how often to run the summary email.").pack(anchor="w")
 
     def save():
-        env_path = os.path.join(project_root, ".env")
-        with open(env_path, "w") as f:
-            for key in ["OPENAI_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "EMAIL_TO"]:
-                f.write(f"{key}={fields[key].get()}\n")
-
+        _write_env({key: fields[key].get() for key in fields})
         cron_schedules = {"daily": "0 8 * * *", "weekly": "0 8 * * 0", "hourly": "0 * * * *"}
         cron_schedule = cron_schedules.get(schedule_var.get(), "0 8 * * *")
-        python_path = sys.executable
-        cron_job = f"{cron_schedule} {python_path} -m summerlog.ai_log_summary"
-        os.system(f'(crontab -l 2>/dev/null | grep -v "summerlog.ai_log_summary" ; echo "{cron_job}") | crontab -')
-        status_var.set(f"Saved to {env_path} and cron updated.")
+        _update_cron(cron_schedule)
+        status_var.set(f"Saved to {DOTENV_PATH} and cron updated.")
 
     btns = ttk.Frame(container, padding=(0, 12))
     btns.pack(fill="x")
@@ -222,11 +236,95 @@ def configure():
     ttk.Label(container, textvariable=status_var, foreground="#555").pack(anchor="w")
     root.mainloop()
 
+
+def _configure_cli():
+    """Headless configuration wizard for terminals."""
+    print("Summerlog configuration (CLI mode). Leave blank to keep defaults.")
+    defaults = {
+        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
+        "SMTP_HOST": os.getenv("SMTP_HOST", ""),
+        "SMTP_PORT": os.getenv("SMTP_PORT", "587"),
+        "SMTP_USER": os.getenv("SMTP_USER", ""),
+        "SMTP_PASS": os.getenv("SMTP_PASS", ""),
+        "EMAIL_FROM": os.getenv("EMAIL_FROM", ""),
+        "EMAIL_TO": os.getenv("EMAIL_TO", ""),
+    }
+
+    def prompt(key, secret=False):
+        current = defaults[key]
+        label = f"{key.replace('_', ' ').title()} [{current}]: "
+        if secret:
+            value = getpass.getpass(label) or current
+        else:
+            value = input(label) or current
+        return value
+
+    new_values = {
+        "OPENAI_API_KEY": prompt("OPENAI_API_KEY", secret=True),
+        "SMTP_HOST": prompt("SMTP_HOST"),
+        "SMTP_PORT": prompt("SMTP_PORT"),
+        "SMTP_USER": prompt("SMTP_USER"),
+        "SMTP_PASS": prompt("SMTP_PASS", secret=True),
+        "EMAIL_FROM": prompt("EMAIL_FROM"),
+        "EMAIL_TO": prompt("EMAIL_TO"),
+    }
+
+    cron_schedules = {"daily": "0 8 * * *", "weekly": "0 8 * * 0", "hourly": "0 * * * *"}
+    schedule_choice = input("Schedule (daily/weekly/hourly) [daily]: ").strip().lower() or "daily"
+    cron_schedule = cron_schedules.get(schedule_choice, cron_schedules["daily"])
+
+    _write_env(new_values)
+    _update_cron(cron_schedule)
+    print(f"Saved to {DOTENV_PATH} and cron updated.")
+
+
+def _write_env(values):
+    """Persist environment values to the config directory."""
+    os.makedirs(CONFIG_ROOT, exist_ok=True)
+    with open(DOTENV_PATH, "w") as f:
+        for key in ["OPENAI_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "EMAIL_TO"]:
+            f.write(f"{key}={values.get(key, '')}\n")
+
+
+def _update_cron(cron_schedule):
+    """Install/update the cron entry; fails gracefully if cron is unavailable."""
+    python_path = sys.executable
+    cron_job = f"{cron_schedule} {python_path} -m summerlog.ai_log_summary"
+
+    try:
+        existing = subprocess.run(["crontab", "-l"], check=False, capture_output=True, text=True)
+    except FileNotFoundError:
+        print("Warning: cron not available (crontab command not found). Skipping cron setup.")
+        return
+
+    if existing.returncode not in (0, 1):
+        print(f"Warning: unable to read existing crontab ({existing.stderr.strip()}). Skipping cron setup.")
+        return
+
+    current_lines = existing.stdout.splitlines() if existing.stdout else []
+    filtered = [line for line in current_lines if "summerlog.ai_log_summary" not in line]
+    filtered.append(cron_job)
+    new_crontab = "\n".join(filtered) + "\n"
+
+    applied = subprocess.run(["crontab", "-"], input=new_crontab, text=True, capture_output=True)
+    if applied.returncode != 0:
+        print(f"Warning: failed to update crontab ({applied.stderr.strip()}).")
+    else:
+        print("Cron entry updated.")
+
+
+def _can_launch_gui():
+    """Detect if a display is available for Tkinter."""
+    if tk is None:
+        return False
+    has_display = os.getenv("DISPLAY") or sys.platform.startswith("win") or sys.platform == "darwin"
+    return bool(has_display)
+
 def main():
 
     """Main function to orchestrate the log summary process."""
     if not all([API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO]):
-        raise SystemExit("Missing required env vars. Check your .env file for: OPENAI_API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO")
+        raise SystemExit(f"Missing required env vars. Check {DOTENV_PATH} for: OPENAI_API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO")
 
     # Determine the timeframe for log collection
     try:

@@ -25,6 +25,13 @@ This command will automatically detect your environment.
 - If you are in a **headless environment** (like an SSH session), it will launch a command-line (CLI) wizard.
 
 Both wizards will guide you through the setup and automatically create a configuration file at `~/.config/summerlog/.env`.
+Runtime state (like the last run timestamp) is also stored alongside that config.
+
+You can re-run the wizard at any time to update credentials or the schedule:
+
+```bash
+summerlog-configure
+```
 
 ## Usage
 
