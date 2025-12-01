@@ -278,21 +278,18 @@ def configure():
     # Ensure user config directory exists
     user_config_dir.mkdir(parents=True, exist_ok=True)
     
-    # Decide whether to run GUI or CLI
-    gui_possible = TKINTER_AVAILABLE and os.environ.get("DISPLAY")
-    
-    if gui_possible:
-        try:
-            root = tk.Tk()
-            run_gui_configure(root)
-        except tk.TclError:
-            print("Display found, but failed to launch GUI. Falling back to CLI.")
-            run_cli_configure()
-    else:
-        if not TKINTER_AVAILABLE:
-            print("Tkinter not found. Falling back to command-line configuration.")
-        else:
-            print("No display found. Falling back to command-line configuration.")
+    if not TKINTER_AVAILABLE:
+        print("Tkinter not found. Falling back to command-line configuration.")
+        run_cli_configure()
+        return
+
+    try:
+        # The most reliable way to check for a display is to try to create a root window.
+        root = tk.Tk()
+        run_gui_configure(root)
+    except tk.TclError:
+        # This will catch cases where a display is not available (e.g., SSH session).
+        print("No display found. Falling back to command-line configuration.")
         run_cli_configure()
 
 
