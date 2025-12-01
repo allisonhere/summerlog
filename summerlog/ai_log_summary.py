@@ -239,7 +239,9 @@ def _configure_gui():
 
 def _configure_cli():
     """Headless configuration wizard for terminals."""
-    print("Summerlog configuration (CLI mode). Leave blank to keep defaults.")
+    print("Summerlog configuration (CLI mode). Leave blank to keep defaults where applicable.")
+    print("Required fields must be provided.")
+    print()
     defaults = {
         "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
         "SMTP_HOST": os.getenv("SMTP_HOST", ""),
@@ -250,32 +252,71 @@ def _configure_cli():
         "EMAIL_TO": os.getenv("EMAIL_TO", ""),
     }
 
-    def prompt(key, secret=False):
+    def prompt(label, key, secret=False, required=False, validator=None, hint=None):
         current = defaults[key]
-        label = f"{key.replace('_', ' ').title()} [{current}]: "
-        if secret:
-            value = getpass.getpass(label) or current
-        else:
-            value = input(label) or current
-        return value
+        display_default = "(current set)" if secret and current else current
+        hint_suffix = f" ({hint})" if hint else ""
+        prompt_text = f"{label}{hint_suffix}"
+        if display_default:
+            prompt_text += f" [{display_default}]"
+        prompt_text += ": "
+
+        while True:
+            if secret:
+                value = getpass.getpass(prompt_text)
+            else:
+                value = input(prompt_text)
+
+            if not value:
+                value = current
+
+            if required and not value:
+                print("  Value is required. Please enter a value.")
+                continue
+
+            if validator:
+                valid, err = validator(value)
+                if not valid:
+                    print(f"  {err}")
+                    continue
+
+            return value
 
     new_values = {
-        "OPENAI_API_KEY": prompt("OPENAI_API_KEY", secret=True),
-        "SMTP_HOST": prompt("SMTP_HOST"),
-        "SMTP_PORT": prompt("SMTP_PORT"),
-        "SMTP_USER": prompt("SMTP_USER"),
-        "SMTP_PASS": prompt("SMTP_PASS", secret=True),
-        "EMAIL_FROM": prompt("EMAIL_FROM"),
-        "EMAIL_TO": prompt("EMAIL_TO"),
+        "OPENAI_API_KEY": prompt("OpenAI API Key", "OPENAI_API_KEY", secret=True, required=True),
+        "SMTP_HOST": prompt("SMTP Host", "SMTP_HOST", required=True),
+        "SMTP_PORT": prompt("SMTP Port", "SMTP_PORT", required=True, validator=_validate_port),
+        "SMTP_USER": prompt("SMTP User", "SMTP_USER"),
+        "SMTP_PASS": prompt("SMTP Password", "SMTP_PASS", secret=True),
+        "EMAIL_FROM": prompt("From Email", "EMAIL_FROM", required=True, validator=_validate_email),
+        "EMAIL_TO": prompt("To Email", "EMAIL_TO", required=True, validator=_validate_email),
     }
 
     cron_schedules = {"daily": "0 8 * * *", "weekly": "0 8 * * 0", "hourly": "0 * * * *"}
-    schedule_choice = input("Schedule (daily/weekly/hourly) [daily]: ").strip().lower() or "daily"
-    cron_schedule = cron_schedules.get(schedule_choice, cron_schedules["daily"])
+    while True:
+        schedule_choice = input("Schedule (daily/weekly/hourly) [daily]: ").strip().lower() or "daily"
+        if schedule_choice in cron_schedules:
+            break
+        print("  Invalid choice. Please enter daily, weekly, or hourly.")
+    cron_schedule = cron_schedules[schedule_choice]
 
-    _write_env(new_values)
-    _update_cron(cron_schedule)
-    print(f"Saved to {DOTENV_PATH} and cron updated.")
+    print("\nSummary (secrets hidden):")
+    print(f"  OpenAI API Key: {'(set)' if new_values['OPENAI_API_KEY'] else '(not set)'}")
+    print(f"  SMTP Host: {new_values['SMTP_HOST']}")
+    print(f"  SMTP Port: {new_values['SMTP_PORT']}")
+    print(f"  SMTP User: {new_values['SMTP_USER']}")
+    print(f"  SMTP Password: {'(set)' if new_values['SMTP_PASS'] else '(not set)'}")
+    print(f"  From Email: {new_values['EMAIL_FROM']}")
+    print(f"  To Email: {new_values['EMAIL_TO']}")
+    print(f"  Schedule: {schedule_choice} -> {cron_schedule}")
+
+    confirm = input("\nSave and update cron? [Y/n]: ").strip().lower() or "y"
+    if confirm.startswith("y"):
+        _write_env(new_values)
+        _update_cron(cron_schedule)
+        print(f"Saved to {DOTENV_PATH} and cron updated.")
+    else:
+        print("Canceled; no changes were saved.")
 
 
 def _write_env(values):
@@ -311,6 +352,24 @@ def _update_cron(cron_schedule):
         print(f"Warning: failed to update crontab ({applied.stderr.strip()}).")
     else:
         print("Cron entry updated.")
+
+
+def _validate_port(value):
+    """Validate a port number."""
+    try:
+        port = int(value)
+        if 1 <= port <= 65535:
+            return True, None
+        return False, "Port must be between 1 and 65535."
+    except ValueError:
+        return False, "Port must be an integer."
+
+
+def _validate_email(value):
+    """Very basic email validation."""
+    if "@" in value and "." in value.split("@")[-1]:
+        return True, None
+    return False, "Please enter a valid email address."
 
 
 def _can_launch_gui():
