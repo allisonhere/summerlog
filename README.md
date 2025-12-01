@@ -14,28 +14,13 @@ If you do not have `pipx`, you can install it with `pip install --user pipx` and
 
 ## Configuration
 
-After installation, you need to create a configuration file.
+After installation, run the interactive configuration wizard. This will prompt you for your settings and automatically create the configuration file.
 
-1.  Create the configuration directory:
-    ```bash
-    mkdir -p ~/.config/summerlog
-    ```
-2.  Create a new file named `.env` inside that directory:
-    ```bash
-    nano ~/.config/summerlog/.env
-    ```
-3.  Add the following content to the file, filling in your own details:
-    ```
-    OPENAI_API_KEY=your_openai_api_key
-    SMTP_HOST=your_smtp_host
-    EMAIL_FROM=your_from_email
-    EMAIL_TO=your_to_email
-    SMTP_PORT=587
-    SMTP_USER=your_smtp_user
-    SMTP_PASS=your_smtp_password
-    ```
+```bash
+summerlog-configure
+```
 
-The `summerlog-configure` command is also available if you are in a graphical desktop environment, but it is not required.
+This will create a `.env` file at `~/.config/summerlog/.env`. You can also create or edit this file manually if you prefer.
 
 ## Usage
 

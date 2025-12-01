@@ -5,8 +5,7 @@ import smtplib
 import textwrap
 import markdown2
 import sys
-import tkinter as tk
-from tkinter import ttk
+import getpass
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
@@ -167,77 +166,52 @@ def send_email(body):
         print(f"An unexpected error occurred while sending email: {e}")
 
 def configure():
-    """Launch a simple Tkinter GUI to configure Summerlog."""
+    """Runs a command-line wizard to configure Summerlog."""
+    print("--- Summerlog Configuration Wizard ---")
+    print(f"This will create a configuration file at {dotenv_path_user}")
+    print("Press Enter to accept the default value in brackets, if available.")
+
     # Ensure user config directory exists
     user_config_dir.mkdir(parents=True, exist_ok=True)
-    env_path = dotenv_path_user
 
-    root = tk.Tk()
-    root.title("Summerlog Configuration")
+    # Load existing values to show as defaults
+    load_dotenv(dotenv_path=dotenv_path_user)
 
-    defaults = {
-        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
-        "SMTP_HOST": os.getenv("SMTP_HOST", ""),
-        "SMTP_PORT": os.getenv("SMTP_PORT", "587"),
-        "SMTP_USER": os.getenv("SMTP_USER", ""),
-        "SMTP_PASS": os.getenv("SMTP_PASS", ""),
-        "EMAIL_FROM": os.getenv("EMAIL_FROM", ""),
-        "EMAIL_TO": os.getenv("EMAIL_TO", ""),
+    def get_input(prompt_text, default_val=None, is_password=False):
+        prompt = f"{prompt_text} [{default_val or ''}]: "
+        if is_password:
+            val = getpass.getpass(prompt)
+            return val if val else default_val
+        else:
+            val = input(prompt)
+            return val if val else default_val
+
+    config = {
+        "OPENAI_API_KEY": get_input("OpenAI API Key", os.getenv("OPENAI_API_KEY"), is_password=True),
+        "SMTP_HOST": get_input("SMTP Host", os.getenv("SMTP_HOST")),
+        "SMTP_PORT": get_input("SMTP Port", os.getenv("SMTP_PORT", "587")),
+        "SMTP_USER": get_input("SMTP User", os.getenv("SMTP_USER")),
+        "SMTP_PASS": get_input("SMTP Password", os.getenv("SMTP_PASS"), is_password=True),
+        "EMAIL_FROM": get_input("From Email", os.getenv("EMAIL_FROM")),
+        "EMAIL_TO": get_input("To Email", os.getenv("EMAIL_TO")),
     }
-    fields = {k: tk.StringVar(value=v) for k, v in defaults.items()}
-    schedule_var = tk.StringVar(value="daily")
-    status_var = tk.StringVar(value=f"Config will be saved to {env_path}")
 
-    container = ttk.Frame(root, padding=12)
-    container.pack(fill="both", expand=True)
+    print("\nWriting the following configuration:")
+    for key, value in config.items():
+        display_value = "********" if key in ["OPENAI_API_KEY", "SMTP_PASS"] and value else value
+        print(f"  {key}: {display_value}")
 
-    ttk.Label(container, text="Summerlog Configuration", font=("TkDefaultFont", 12, "bold")).pack(pady=(0, 8))
-    ttk.Label(container, text="Save writes config and installs the cron job. Quit closes without saving.").pack(pady=(0, 12))
+    if input("\nSave this configuration? (y/n): ").lower() != 'y':
+        print("Configuration cancelled.")
+        return
 
-    def add_field(label, key, show=None):
-        frame = ttk.Frame(container, padding=(0, 4))
-        frame.pack(fill="x")
-        ttk.Label(frame, text=label, width=18, anchor="w").pack(side="left")
-        entry = ttk.Entry(frame, textvariable=fields[key], show=show)
-        entry.pack(side="left", fill="x", expand=True)
-        return entry
+    with open(dotenv_path_user, "w") as f:
+        for key, value in config.items():
+            if value:
+                f.write(f"{key}={value}\n")
 
-    ttk.Label(container, text="OpenAI", font=("TkDefaultFont", 10, "bold")).pack(anchor="w")
-    add_field("API Key", "OPENAI_API_KEY", show="*")
+    print(f"\nConfiguration saved successfully to {dotenv_path_user}")
 
-    ttk.Label(container, text="Email Settings", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(8, 0))
-    add_field("SMTP Host", "SMTP_HOST")
-    add_field("SMTP Port", "SMTP_PORT")
-    add_field("SMTP User", "SMTP_USER")
-    add_field("SMTP Password", "SMTP_PASS", show="*")
-    add_field("From Email", "EMAIL_FROM")
-    add_field("To Email", "EMAIL_TO")
-
-    ttk.Label(container, text="Cron Schedule", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(8, 0))
-    schedule_frame = ttk.Frame(container, padding=(0, 4))
-    schedule_frame.pack(fill="x")
-    ttk.OptionMenu(schedule_frame, schedule_var, "daily", "daily", "weekly", "hourly").pack(fill="x")
-    ttk.Label(container, text="Choose how often to run the summary email.").pack(anchor="w")
-
-    def save():
-        with open(env_path, "w") as f:
-            for key in ["OPENAI_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "EMAIL_TO"]:
-                f.write(f"{key}={fields[key].get()}\n")
-
-        cron_schedules = {"daily": "0 8 * * *", "weekly": "0 8 * * 0", "hourly": "0 * * * *"}
-        cron_schedule = cron_schedules.get(schedule_var.get(), "0 8 * * *")
-        python_path = sys.executable
-        cron_job = f"{cron_schedule} {python_path} -m summerlog.ai_log_summary"
-        os.system(f'(crontab -l 2>/dev/null | grep -v "summerlog.ai_log_summary" ; echo "{cron_job}") | crontab -')
-        status_var.set(f"Saved to {env_path} and cron updated.")
-
-    btns = ttk.Frame(container, padding=(0, 12))
-    btns.pack(fill="x")
-    ttk.Button(btns, text="Save", command=save).pack(side="right", padx=4)
-    ttk.Button(btns, text="Quit", command=root.destroy).pack(side="right")
-
-    ttk.Label(container, textvariable=status_var, foreground="#555").pack(anchor="w")
-    root.mainloop()
 
 def main():
 
