@@ -11,13 +11,27 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
-
+from pathlib import Path
+import platformdirs
 
 # --- Configuration ---
-# Build paths relative to the project root
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-dotenv_path = os.path.join(project_root, '.env')
+# Look for config in user's config dir first, then project root
+app_name = "summerlog"
+user_config_dir = Path(platformdirs.user_config_dir(app_name))
+dotenv_path_user = user_config_dir / ".env"
+
+project_root = Path(__file__).parent.parent
+dotenv_path_project = project_root / ".env"
+
+# Determine which .env file to load
+if dotenv_path_user.exists():
+    dotenv_path = dotenv_path_user
+else:
+    # Fallback to project root
+    dotenv_path = dotenv_path_project
+
 load_dotenv(dotenv_path=dotenv_path, override=True)
+
 
 # Load from environment
 API_KEY = os.getenv("OPENAI_API_KEY")
@@ -154,6 +168,10 @@ def send_email(body):
 
 def configure():
     """Launch a simple Tkinter GUI to configure Summerlog."""
+    # Ensure user config directory exists
+    user_config_dir.mkdir(parents=True, exist_ok=True)
+    env_path = dotenv_path_user
+
     root = tk.Tk()
     root.title("Summerlog Configuration")
 
@@ -168,13 +186,13 @@ def configure():
     }
     fields = {k: tk.StringVar(value=v) for k, v in defaults.items()}
     schedule_var = tk.StringVar(value="daily")
-    status_var = tk.StringVar(value="Fill in the fields and click Save.")
+    status_var = tk.StringVar(value=f"Config will be saved to {env_path}")
 
     container = ttk.Frame(root, padding=12)
     container.pack(fill="both", expand=True)
 
     ttk.Label(container, text="Summerlog Configuration", font=("TkDefaultFont", 12, "bold")).pack(pady=(0, 8))
-    ttk.Label(container, text="Save writes .env and installs the cron job. Quit closes without saving.").pack(pady=(0, 12))
+    ttk.Label(container, text="Save writes config and installs the cron job. Quit closes without saving.").pack(pady=(0, 12))
 
     def add_field(label, key, show=None):
         frame = ttk.Frame(container, padding=(0, 4))
@@ -202,7 +220,6 @@ def configure():
     ttk.Label(container, text="Choose how often to run the summary email.").pack(anchor="w")
 
     def save():
-        env_path = os.path.join(project_root, ".env")
         with open(env_path, "w") as f:
             for key in ["OPENAI_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "EMAIL_TO"]:
                 f.write(f"{key}={fields[key].get()}\n")
