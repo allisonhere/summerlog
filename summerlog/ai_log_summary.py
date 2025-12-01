@@ -5,40 +5,19 @@ import smtplib
 import textwrap
 import markdown2
 import sys
-import getpass
+import tkinter as tk
+from tkinter import ttk
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
-from pathlib import Path
-import platformdirs
 
-# Try to import Tkinter, but don't fail if it's not available
-try:
-    import tkinter as tk
-    from tkinter import ttk
-    TKINTER_AVAILABLE = True
-except ImportError:
-    TKINTER_AVAILABLE = False
 
 # --- Configuration ---
-# Look for config in user's config dir first, then project root
-app_name = "summerlog"
-user_config_dir = Path(platformdirs.user_config_dir(app_name))
-dotenv_path_user = user_config_dir / ".env"
-
-project_root = Path(__file__).parent.parent
-dotenv_path_project = project_root / ".env"
-
-# Determine which .env file to load
-if dotenv_path_user.exists():
-    dotenv_path = dotenv_path_user
-else:
-    # Fallback to project root
-    dotenv_path = dotenv_path_project
-
+# Build paths relative to the project root
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+dotenv_path = os.path.join(project_root, '.env')
 load_dotenv(dotenv_path=dotenv_path, override=True)
-
 
 # Load from environment
 API_KEY = os.getenv("OPENAI_API_KEY")
@@ -173,53 +152,9 @@ def send_email(body):
     except Exception as e:
         print(f"An unexpected error occurred while sending email: {e}")
 
-def run_cli_configure():
-    """Runs a command-line wizard to configure Summerlog."""
-    print("--- Summerlog Configuration Wizard (CLI) ---")
-    print(f"This will create a configuration file at {dotenv_path_user}")
-    print("Press Enter to accept the default value in brackets, if available.")
-
-    # Load existing values to show as defaults
-    load_dotenv(dotenv_path=dotenv_path_user)
-
-    def get_input(prompt_text, default_val=None, is_password=False):
-        prompt = f"{prompt_text} [{default_val or ''}]: "
-        if is_password:
-            val = getpass.getpass(prompt)
-            return val if val else default_val
-        else:
-            val = input(prompt)
-            return val if val else default_val
-
-    config = {
-        "OPENAI_API_KEY": get_input("OpenAI API Key", os.getenv("OPENAI_API_KEY"), is_password=True),
-        "SMTP_HOST": get_input("SMTP Host", os.getenv("SMTP_HOST")),
-        "SMTP_PORT": get_input("SMTP Port", os.getenv("SMTP_PORT", "587")),
-        "SMTP_USER": get_input("SMTP User", os.getenv("SMTP_USER")),
-        "SMTP_PASS": get_input("SMTP Password", os.getenv("SMTP_PASS"), is_password=True),
-        "EMAIL_FROM": get_input("From Email", os.getenv("EMAIL_FROM")),
-        "EMAIL_TO": get_input("To Email", os.getenv("EMAIL_TO")),
-    }
-
-    print("\nWriting the following configuration:")
-    for key, value in config.items():
-        display_value = "********" if key in ["OPENAI_API_KEY", "SMTP_PASS"] and value else value
-        print(f"  {key}: {display_value}")
-
-    if input("\nSave this configuration? (y/n): ").lower() != 'y':
-        print("Configuration cancelled.")
-        return
-
-    with open(dotenv_path_user, "w") as f:
-        for key, value in config.items():
-            if value:
-                f.write(f"{key}={value}\n")
-
-    print(f"\nConfiguration saved successfully to {dotenv_path_user}")
-
-def run_gui_configure(root):
+def configure():
     """Launch a simple Tkinter GUI to configure Summerlog."""
-    env_path = dotenv_path_user
+    root = tk.Tk()
     root.title("Summerlog Configuration")
 
     defaults = {
@@ -232,13 +167,14 @@ def run_gui_configure(root):
         "EMAIL_TO": os.getenv("EMAIL_TO", ""),
     }
     fields = {k: tk.StringVar(value=v) for k, v in defaults.items()}
-    status_var = tk.StringVar(value=f"Config will be saved to {env_path}")
+    schedule_var = tk.StringVar(value="daily")
+    status_var = tk.StringVar(value="Fill in the fields and click Save.")
 
     container = ttk.Frame(root, padding=12)
     container.pack(fill="both", expand=True)
 
     ttk.Label(container, text="Summerlog Configuration", font=("TkDefaultFont", 12, "bold")).pack(pady=(0, 8))
-    ttk.Label(container, text="Save writes config. Quit closes without saving.").pack(pady=(0, 12))
+    ttk.Label(container, text="Save writes .env and installs the cron job. Quit closes without saving.").pack(pady=(0, 12))
 
     def add_field(label, key, show=None):
         frame = ttk.Frame(container, padding=(0, 4))
@@ -259,11 +195,24 @@ def run_gui_configure(root):
     add_field("From Email", "EMAIL_FROM")
     add_field("To Email", "EMAIL_TO")
 
+    ttk.Label(container, text="Cron Schedule", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(8, 0))
+    schedule_frame = ttk.Frame(container, padding=(0, 4))
+    schedule_frame.pack(fill="x")
+    ttk.OptionMenu(schedule_frame, schedule_var, "daily", "daily", "weekly", "hourly").pack(fill="x")
+    ttk.Label(container, text="Choose how often to run the summary email.").pack(anchor="w")
+
     def save():
+        env_path = os.path.join(project_root, ".env")
         with open(env_path, "w") as f:
             for key in ["OPENAI_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "EMAIL_TO"]:
                 f.write(f"{key}={fields[key].get()}\n")
-        status_var.set(f"Saved to {env_path}")
+
+        cron_schedules = {"daily": "0 8 * * *", "weekly": "0 8 * * 0", "hourly": "0 * * * *"}
+        cron_schedule = cron_schedules.get(schedule_var.get(), "0 8 * * *")
+        python_path = sys.executable
+        cron_job = f"{cron_schedule} {python_path} -m summerlog.ai_log_summary"
+        os.system(f'(crontab -l 2>/dev/null | grep -v "summerlog.ai_log_summary" ; echo "{cron_job}") | crontab -')
+        status_var.set(f"Saved to {env_path} and cron updated.")
 
     btns = ttk.Frame(container, padding=(0, 12))
     btns.pack(fill="x")
@@ -272,26 +221,6 @@ def run_gui_configure(root):
 
     ttk.Label(container, textvariable=status_var, foreground="#555").pack(anchor="w")
     root.mainloop()
-
-def configure():
-    """Runs a configuration wizard, using a GUI if available, otherwise falling back to CLI."""
-    # Ensure user config directory exists
-    user_config_dir.mkdir(parents=True, exist_ok=True)
-    
-    if not TKINTER_AVAILABLE:
-        print("Tkinter not found. Falling back to command-line configuration.")
-        run_cli_configure()
-        return
-
-    try:
-        # The most reliable way to check for a display is to try to create a root window.
-        root = tk.Tk()
-        run_gui_configure(root)
-    except tk.TclError:
-        # This will catch cases where a display is not available (e.g., SSH session).
-        print("No display found. Falling back to command-line configuration.")
-        run_cli_configure()
-
 
 def main():
 
