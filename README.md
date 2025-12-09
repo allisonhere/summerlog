@@ -4,13 +4,33 @@ An AI-powered log summarizer for Docker containers.
 
 ## Installation
 
-It is recommended to install Summerlog using `pipx` to ensure its dependencies are isolated from your system.
+### One-liner (Ubuntu/Debian, headless safe)
+
+This installs/refreshes Summerlog via `pipx`, sets up PATH, and launches the CLI configurator:
 
 ```bash
-pipx install git+https://github.com/allisonhere/summerlog.git
+curl -fsSL https://raw.githubusercontent.com/allisonhere/summerlog/master/scripts/install_summerlog.sh | bash
 ```
 
-If you do not have `pipx`, you can install it with `pip install --user pipx` and `pipx ensurepath`.
+If you prefer to inspect first:
+
+```bash
+curl -fsSL -o install_summerlog.sh https://raw.githubusercontent.com/allisonhere/summerlog/master/scripts/install_summerlog.sh
+bash install_summerlog.sh
+```
+
+### Manual install with pipx
+
+```bash
+pipx install git+https://github.com/allisonhere/summerlog.git@master
+```
+
+If you do not have `pipx`, you can install it with:
+
+```bash
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
+```
 
 ## Configuration
 
@@ -32,6 +52,8 @@ You can re-run the wizard at any time to update credentials or the schedule:
 ```bash
 summerlog-configure
 ```
+
+The wizard installs a **cron** entry to run Summerlog on the cadence you pick (daily/weekly/hourly).
 
 ## Usage
 
