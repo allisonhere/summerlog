@@ -7,6 +7,9 @@ import sys
 import textwrap
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
+import argparse
+import shutil
+from importlib import metadata
 
 try:
     import tkinter as tk
@@ -28,19 +31,35 @@ DOTENV_PATH = os.path.join(CONFIG_ROOT, ".env")
 TIMESTAMP_FILE = os.path.join(CONFIG_ROOT, "last_run_timestamp.txt")
 load_dotenv(dotenv_path=DOTENV_PATH, override=True)
 
+
+def _int_env(name, default):
+    """Parse integer environment variables safely, returning default on invalid or missing values."""
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        print(f"Warning: env {name} expected int; got '{raw}'. Using default {default}.")
+        return default
+
+
 # Load from environment
 API_KEY = os.getenv("OPENAI_API_KEY")
 API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_PORT = _int_env("SMTP_PORT", 587)
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASS = os.getenv("SMTP_PASS")
+SMTP_SECURITY = os.getenv("SMTP_SECURITY", "starttls").lower()
 EMAIL_FROM = os.getenv("EMAIL_FROM")
 EMAIL_TO = os.getenv("EMAIL_TO")
 CONTAINERS = [c.strip() for c in os.getenv("CONTAINERS", "").split(",") if c.strip()]
-MAX_LOG_CHARS = int(os.getenv("MAX_LOG_CHARS", 20000))
-SINCE_HOURS = int(os.getenv("SINCE_HOURS", 24))
+MAX_LOG_CHARS = _int_env("MAX_LOG_CHARS", 20000)
+SINCE_HOURS = _int_env("SINCE_HOURS", 24)
+REDACTION_PATTERNS = [p.strip() for p in os.getenv("REDACTION_PATTERNS", "").split(",") if p.strip()]
+SCHEDULER = os.getenv("SCHEDULER", "").lower()
 
 def get_docker_containers():
     """Returns a list of running Docker container names."""
@@ -116,13 +135,14 @@ def get_ai_summary(prompt):
             temperature=0.2,
             max_tokens=1024,
         )
-        return completion.choices[0].message.content.strip()
+        return completion.choices[0].message.content.strip(), None
     except Exception as e:
-        return f"Error calling OpenAI API: {e}"
+        return None, f"Error calling OpenAI API: {e}"
 
 def send_email(body):
     """Sends the summary email."""
     try:
+        security_mode = SMTP_SECURITY if SMTP_SECURITY in {"starttls", "ssl", "none"} else "starttls"
         style = """
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f8f9fa; padding: 20px; }
@@ -143,23 +163,29 @@ def send_email(body):
         msg["From"] = EMAIL_FROM
         msg["To"] = EMAIL_TO
 
-        if SMTP_PORT == 465:
+        if security_mode == "ssl":
             with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as smtp:
                 if SMTP_USER and SMTP_PASS:
                     smtp.login(SMTP_USER, SMTP_PASS)
                 smtp.send_message(msg)
         else:
             with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
-                if SMTP_USER and SMTP_PASS:
-                    smtp.starttls()
+                if security_mode == "starttls":
+                    if SMTP_USER and SMTP_PASS:
+                        smtp.starttls()
+                        smtp.login(SMTP_USER, SMTP_PASS)
+                elif SMTP_USER and SMTP_PASS:
                     smtp.login(SMTP_USER, SMTP_PASS)
                 smtp.send_message(msg)
         
         print("Email sent successfully.")
+        return True
     except smtplib.SMTPException as e:
         print(f"Error sending email: {e}")
+        return False
     except Exception as e:
         print(f"An unexpected error occurred while sending email: {e}")
+        return False
 
 def configure():
     """Launch the appropriate configuration wizard based on environment."""
@@ -185,16 +211,18 @@ def _configure_gui():
         "SMTP_PASS": os.getenv("SMTP_PASS", ""),
         "EMAIL_FROM": os.getenv("EMAIL_FROM", ""),
         "EMAIL_TO": os.getenv("EMAIL_TO", ""),
+        "SCHEDULER": SCHEDULER or _default_scheduler(),
     }
     fields = {k: tk.StringVar(value=v) for k, v in defaults.items()}
     schedule_var = tk.StringVar(value="daily")
     status_var = tk.StringVar(value="Fill in the fields and click Save.")
+    scheduler_var = fields["SCHEDULER"]
 
     container = ttk.Frame(root, padding=12)
     container.pack(fill="both", expand=True)
 
     ttk.Label(container, text="Summerlog Configuration", font=("TkDefaultFont", 12, "bold")).pack(pady=(0, 8))
-    ttk.Label(container, text="Save writes .env and installs the cron job. Quit closes without saving.").pack(pady=(0, 12))
+    ttk.Label(container, text="Save writes .env and installs the scheduled job. Quit closes without saving.").pack(pady=(0, 12))
 
     def add_field(label, key, show=None):
         frame = ttk.Frame(container, padding=(0, 4))
@@ -215,6 +243,12 @@ def _configure_gui():
     add_field("From Email", "EMAIL_FROM")
     add_field("To Email", "EMAIL_TO")
 
+    ttk.Label(container, text="Scheduler", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(8, 0))
+    scheduler_frame = ttk.Frame(container, padding=(0, 4))
+    scheduler_frame.pack(fill="x", anchor="w")
+    ttk.Radiobutton(scheduler_frame, text="cron", variable=scheduler_var, value="cron").pack(anchor="w")
+    ttk.Radiobutton(scheduler_frame, text="systemd", variable=scheduler_var, value="systemd").pack(anchor="w")
+
     ttk.Label(container, text="Cron Schedule", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(8, 0))
     schedule_frame = ttk.Frame(container, padding=(0, 4))
     schedule_frame.pack(fill="x")
@@ -225,8 +259,9 @@ def _configure_gui():
         _write_env({key: fields[key].get() for key in fields})
         cron_schedules = {"daily": "0 8 * * *", "weekly": "0 8 * * 0", "hourly": "0 * * * *"}
         cron_schedule = cron_schedules.get(schedule_var.get(), "0 8 * * *")
-        _update_cron(cron_schedule)
-        status_var.set(f"Saved to {DOTENV_PATH} and cron updated.")
+        scheduler_choice = fields["SCHEDULER"].get().strip().lower() or _default_scheduler()
+        _update_scheduler(scheduler_choice, cron_schedule)
+        status_var.set(f"Saved to {DOTENV_PATH} and scheduler updated.")
 
     btns = ttk.Frame(container, padding=(0, 12))
     btns.pack(fill="x")
@@ -250,6 +285,7 @@ def _configure_cli():
         "SMTP_PASS": os.getenv("SMTP_PASS", ""),
         "EMAIL_FROM": os.getenv("EMAIL_FROM", ""),
         "EMAIL_TO": os.getenv("EMAIL_TO", ""),
+        "SCHEDULER": SCHEDULER or _default_scheduler(),
     }
 
     def prompt(label, key, secret=False, required=False, validator=None, hint=None):
@@ -290,6 +326,7 @@ def _configure_cli():
         "SMTP_PASS": prompt("SMTP Password", "SMTP_PASS", secret=True),
         "EMAIL_FROM": prompt("From Email", "EMAIL_FROM", required=True, validator=_validate_email),
         "EMAIL_TO": prompt("To Email", "EMAIL_TO", required=True, validator=_validate_email),
+        "SCHEDULER": prompt("Scheduler (cron/systemd)", "SCHEDULER", hint="leave blank for auto"),
     }
 
     cron_schedules = {"daily": "0 8 * * *", "weekly": "0 8 * * 0", "hourly": "0 * * * *"}
@@ -309,12 +346,14 @@ def _configure_cli():
     print(f"  From Email: {new_values['EMAIL_FROM']}")
     print(f"  To Email: {new_values['EMAIL_TO']}")
     print(f"  Schedule: {schedule_choice} -> {cron_schedule}")
+    print(f"  Scheduler: {new_values['SCHEDULER'] or '(auto)'}")
 
-    confirm = input("\nSave and update cron? [Y/n]: ").strip().lower() or "y"
+    confirm = input("\nSave and update scheduler? [Y/n]: ").strip().lower() or "y"
     if confirm.startswith("y"):
         _write_env(new_values)
-        _update_cron(cron_schedule)
-        print(f"Saved to {DOTENV_PATH} and cron updated.")
+        scheduler_choice = new_values["SCHEDULER"].strip().lower() or _default_scheduler()
+        _update_scheduler(scheduler_choice, cron_schedule)
+        print(f"Saved to {DOTENV_PATH} and scheduler updated.")
     else:
         print("Canceled; no changes were saved.")
 
@@ -322,9 +361,28 @@ def _configure_cli():
 def _write_env(values):
     """Persist environment values to the config directory."""
     os.makedirs(CONFIG_ROOT, exist_ok=True)
+    # Preserve additional tunables so re-running the wizard does not drop them.
+    keys = [
+        "OPENAI_API_KEY",
+        "OPENAI_API_BASE",
+        "OPENAI_MODEL",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "SMTP_USER",
+        "SMTP_PASS",
+        "SMTP_SECURITY",
+        "EMAIL_FROM",
+        "EMAIL_TO",
+        "CONTAINERS",
+        "MAX_LOG_CHARS",
+        "SINCE_HOURS",
+        "REDACTION_PATTERNS",
+        "SCHEDULER",
+    ]
     with open(DOTENV_PATH, "w") as f:
-        for key in ["OPENAI_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "EMAIL_TO"]:
-            f.write(f"{key}={values.get(key, '')}\n")
+        for key in keys:
+            current_value = values.get(key, os.getenv(key, ""))
+            f.write(f"{key}={current_value}\n")
 
 
 def _update_cron(cron_schedule):
@@ -354,6 +412,85 @@ def _update_cron(cron_schedule):
         print("Cron entry updated.")
 
 
+def _update_systemd(cron_schedule):
+    """Install/update a systemd user timer; fails gracefully if systemd is unavailable."""
+    if not shutil.which("systemctl"):
+        print("Warning: systemctl not available. Skipping systemd setup.")
+        return
+
+    python_path = sys.executable
+    service_dir = os.path.join(os.path.expanduser("~/.config"), "systemd", "user")
+    os.makedirs(service_dir, exist_ok=True)
+
+    service_path = os.path.join(service_dir, "summerlog.service")
+    timer_path = os.path.join(service_dir, "summerlog.timer")
+
+    with open(service_path, "w") as f:
+        f.write(
+            "[Unit]\n"
+            "Description=Summerlog container log summary\n\n"
+            "[Service]\n"
+            "Type=oneshot\n"
+            f"ExecStart={python_path} -m summerlog.ai_log_summary\n"
+        )
+
+    on_calendar = {
+        "0 8 * * *": "*-*-* 08:00:00",
+        "0 8 * * 0": "Sun *-*-* 08:00:00",
+        "0 * * * *": "hourly",
+    }.get(cron_schedule, "daily")
+
+    with open(timer_path, "w") as f:
+        f.write(
+            "[Unit]\n"
+            "Description=Run Summerlog on schedule\n\n"
+            "[Timer]\n"
+            f"OnCalendar={on_calendar}\n"
+            "Persistent=true\n"
+            "Unit=summerlog.service\n\n"
+            "[Install]\n"
+            "WantedBy=timers.target\n"
+        )
+
+    reload = subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, text=True)
+    if reload.returncode != 0:
+        print(f"Warning: systemd daemon-reload failed ({reload.stderr.strip()}).")
+        return
+
+    enable = subprocess.run(["systemctl", "--user", "enable", "--now", "summerlog.timer"], capture_output=True, text=True)
+    if enable.returncode != 0:
+        print(f"Warning: enabling summerlog.timer failed ({enable.stderr.strip()}).")
+    else:
+        print("Systemd timer enabled.")
+
+
+def _default_scheduler():
+    """Pick a scheduler based on availability: prefer cron if present, else systemd."""
+    has_cron = bool(shutil.which("crontab"))
+    has_systemd = bool(shutil.which("systemctl"))
+    if has_cron:
+        return "cron"
+    if has_systemd:
+        return "systemd"
+    return "cron"
+
+
+def _update_scheduler(scheduler_choice, cron_schedule):
+    """Update cron or systemd based on choice, with fallback."""
+    choice = scheduler_choice or _default_scheduler()
+    if choice == "systemd":
+        if shutil.which("systemctl"):
+            _update_systemd(cron_schedule)
+            return
+        print("systemd not available; falling back to cron.")
+    if choice == "cron":
+        if shutil.which("crontab"):
+            _update_cron(cron_schedule)
+            return
+        print("cron not available; attempting systemd instead.")
+        _update_systemd(cron_schedule)
+
+
 def _validate_port(value):
     """Validate a port number."""
     try:
@@ -380,8 +517,24 @@ def _can_launch_gui():
     return bool(has_display)
 
 def main():
-
     """Main function to orchestrate the log summary process."""
+    parser = argparse.ArgumentParser(
+        description="Summarize Docker container logs with AI and email the results.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent(
+            f"""\
+            Environment configuration is loaded from:
+              {DOTENV_PATH}
+            Required: OPENAI_API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO
+            Optional: OPENAI_API_BASE, OPENAI_MODEL, SMTP_SECURITY, SMTP_PORT, SMTP_USER, SMTP_PASS,
+                      CONTAINERS, MAX_LOG_CHARS, SINCE_HOURS, REDACTION_PATTERNS, SCHEDULER
+            """
+        ),
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Print the summary without sending email or updating timestamp.")
+    parser.add_argument("--version", action="version", version=f"summerlog {metadata.version('summerlog')}")
+    args = parser.parse_args()
+
     if not all([API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO]):
         raise SystemExit(f"Missing required env vars. Check {DOTENV_PATH} for: OPENAI_API_KEY, SMTP_HOST, EMAIL_FROM, EMAIL_TO")
 
@@ -416,10 +569,20 @@ def main():
 
     print("Generating AI summary...")
     prompt = build_prompt(log_data, since_str)
-    summary = get_ai_summary(prompt)
+    summary, ai_error = get_ai_summary(prompt)
+    if ai_error:
+        print(ai_error)
+        raise SystemExit(1)
+
+    if args.dry_run:
+        print("\n--- DRY RUN: Summary ---\n")
+        print(summary)
+        return
 
     print("Sending summary email...")
-    send_email(summary)
+    email_sent = send_email(summary)
+    if not email_sent:
+        raise SystemExit(1)
 
     # Update the timestamp file after a successful run
     with open(TIMESTAMP_FILE, 'w') as f:
